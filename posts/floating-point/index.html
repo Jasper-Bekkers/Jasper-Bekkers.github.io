@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<!--
+    So Simple Jekyll Theme 3.1.1
+    Copyright 2013-2018 Michael Rose - mademistakes.com | @mmistakes
+    Free for personal and commercial use under the MIT license
+    https://github.com/mmistakes/so-simple-theme/blob/master/LICENSE
+-->
+<html lang="en-US" class="no-js">
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  
+
+  
+    
+    <!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>In-depth: IEEE 754 Multiplication And Addition | My Awesome Site</title>
+<meta name="generator" content="Jekyll v3.8.3" />
+<meta property="og:title" content="In-depth: IEEE 754 Multiplication And Addition" />
+<meta name="author" content="Jasper Bekkers" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="To me, programming has always been an exercise in understanding blackboxes. About taking systems apart and figuring out their internal workings. And although this teaches you about how other programmers think and work it does take away some of the amazement you have when seeing a cleverly written piece of code." />
+<meta property="og:description" content="To me, programming has always been an exercise in understanding blackboxes. About taking systems apart and figuring out their internal workings. And although this teaches you about how other programmers think and work it does take away some of the amazement you have when seeing a cleverly written piece of code." />
+<link rel="canonical" href="http://localhost:4000/posts/floating-point/" />
+<meta property="og:url" content="http://localhost:4000/posts/floating-point/" />
+<meta property="og:site_name" content="My Awesome Site" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2011-12-06T18:36:05+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:site" content="@JasperBekkers" />
+<meta name="twitter:creator" content="@JasperBekkers" />
+<script type="application/ld+json">
+{"description":"To me, programming has always been an exercise in understanding blackboxes. About taking systems apart and figuring out their internal workings. And although this teaches you about how other programmers think and work it does take away some of the amazement you have when seeing a cleverly written piece of code.","author":{"@type":"Person","name":"Jasper Bekkers"},"@type":"BlogPosting","url":"http://localhost:4000/posts/floating-point/","publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/jb-logo.png"},"name":"Jasper Bekkers"},"headline":"In-depth: IEEE 754 Multiplication And Addition","dateModified":"2011-12-06T18:36:05+01:00","datePublished":"2011-12-06T18:36:05+01:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/floating-point/"},"@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+  
+
+  <script>
+    /* Cut the mustard */
+    if ( 'querySelector' in document && 'addEventListener' in window ) {
+      document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + 'js';
+    }
+  </script>
+
+  <link rel="stylesheet" href="/assets/css/main.css">
+  
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,400i,700,700i|Lora:400,400i,700,700i">
+  <link rel="alternate" type="application/atom+xml" title="My Awesome Site" href="/atom.xml">
+<!-- start custom head snippets -->
+
+<!-- insert favicons. use http://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+
+</head>
+
+
+  <body class="layout--post  in-depth-ieee-754-multiplication-and-addition">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#primary-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    
+  <div class="navigation-wrapper">
+    <a href="#menu-toggle" id="menu-toggle">Menu</a>
+    <nav id="primary-nav" class="site-nav animated drop">
+      <ul><li><a href="/">Home</a></li><li><a href="/posts/">Posts</a></li><li><a href="/portfolio/">Portfolio</a></li></ul>
+    </nav>
+  </div><!-- /.navigation-wrapper -->
+
+
+    <header class="masthead">
+  <div class="wrap">
+    
+      <a href="/" class="site-logo" rel="home" title="My Awesome Site">
+        <img src="/assets/img/jb-logo.png" class="site-logo-img animated fadeInDown" alt="My Awesome Site">
+      </a>
+    
+    
+      <h1 class="site-title animated fadeIn"><a href="/">My Awesome Site</a></h1>
+      <p class="site-description animated fadeIn" itemprop="description">It really is the best.</p>
+    
+  </div>
+</header><!-- /.masthead -->
+
+
+    <main id="main" class="main-content" aria-label="Content">
+  <article class="h-entry">
+    
+
+    <div class="page-wrapper">
+      <header class="page-header">
+        
+        
+          <h1 id="page-title" class="page-title p-name">In-depth: IEEE 754 Multiplication And Addition
+</h1>
+        
+      </header>
+
+      <div class="page-sidebar">
+        <div class="page-author h-card p-author"><div class="author-info"><div class="author-name">
+        <em>by</em> <span class="p-name">Jasper Bekkers</span>
+      </div>
+
+<span class="read-time">6 min read</span>
+
+    <time class="page-date dt-published" datetime="2011-12-06T18:36:05+01:00"><a class="u-url" href="">December 6, 2011</a>
+</time>
+
+  </div>
+</div>
+
+        
+  <h3 class="page-taxonomies-title">Categories</h3>
+  <ul class="page-taxonomies"><li class="page-taxonomy">posts</li>
+  </ul>
+
+
+        
+
+      </div>
+
+      <div class="page-content">
+        <div class="e-content">
+          <p>To me, programming has always been an exercise in understanding blackboxes. About taking systems apart and figuring out their internal workings. And although this teaches you about how other programmers think and work it does take away some of the amazement you have when seeing a cleverly written piece of code.</p>
+
+<p>For me, and for a lot of other programmers, floating point numbers have for the longest time been one of these blackboxes. There is a lot of (good and bad) information on the web about floating points, most of it describes the data format, how the bits are interpreted, what epsilon values you should use or how to deal with accuracy issues in floats. Hardly any article talks about where all of this actually comes from or how fundamental floating point operations are implemented.</p>
+
+<p>So in this article I will talk about how some of these operations are implemented, specifically multiplication, addition and fused-multiply-add. I won’t talk about decimal-to-float conversions, float-to-double or float-to-int casts, division, comparisons or trigonometry functions. If you’re interested in these I suggest taking a look at John Hauser’s excellent SoftFloat library listed below. It’s the same library I’ve used to borrow the code samples in this article from.</p>
+
+<p>For convenience sake I’ll also show an image of the floating point data layout taken from wikipedia because this might help explain some of the magic numbers and masks used in the code below. The hardware diagrams are taken from the “Floating-Point Fused Multiply-Add Architectures” paper linked below and are diagrams for double precision implementations (this due to me being unable to produce these pretty pictures myself). Keep that in mind when reading them.</p>
+
+<p><img src="/assets/img/ieee754_32bit_float_format.png" alt="image" /></p>
+
+<h1 id="multiplication">Multiplication</h1>
+
+<p>The way IEEE 754 multiplication works is identical to how it works for regular scientific notation. Simply multiply the coefficients and add the exponents. However, because this is done in hardware we have some extra constraints, such as overflow and rounding, to take into account. These extra constraints are what make floats appear so ‘fuzzy’ to some.</p>
+
+<ol>
+  <li>Check if either of the operands (A and B) are zero (early out)</li>
+  <li>Check for potential exponent overflow and throw corresponding overflow errors</li>
+  <li>Compute sign as <code class="highlighter-rouge">Csign = Asign XOR Bsign</code></li>
+  <li>Compute the exponent <code class="highlighter-rouge">Cexponent = Aexponent + Bexponent - 127</code></li>
+  <li>Compute mantissa Cmantissa = <code class="highlighter-rouge">Amantissa * Bmantissa</code> (23-bit integer multiply) and round the result according to the currently set rounding mode.</li>
+  <li>If Cmantissa has overflown, normalize results (<code class="highlighter-rouge">Cmantissa &lt;&lt;= 1</code>, <code class="highlighter-rouge">Cexponent -= 1</code>)</li>
+</ol>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">f32</span> <span class="nf">float32_mul</span><span class="p">(</span><span class="n">f32</span> <span class="n">a</span><span class="p">,</span> <span class="n">f32</span> <span class="n">b</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="c1">// extract mantissa, exponent and sign</span>
+	<span class="n">u32</span> <span class="n">aFrac</span> <span class="o">=</span> <span class="n">a</span> <span class="o">&amp;</span> <span class="mh">0x007FFFFF</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">bFrac</span> <span class="o">=</span> <span class="n">b</span> <span class="o">&amp;</span> <span class="mh">0x007FFFFF</span><span class="p">;</span>
+
+	<span class="n">u32</span> <span class="n">aExp</span> <span class="o">=</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;&gt;</span> <span class="mi">23</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0xFF</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">bExp</span> <span class="o">=</span> <span class="p">(</span><span class="n">b</span> <span class="o">&gt;&gt;</span> <span class="mi">23</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0xFF</span><span class="p">;</span>
+
+	<span class="n">u32</span> <span class="n">aSign</span> <span class="o">=</span> <span class="n">a</span> <span class="o">&gt;&gt;</span> <span class="mi">31</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">bSign</span> <span class="o">=</span> <span class="n">b</span> <span class="o">&gt;&gt;</span> <span class="mi">31</span><span class="p">;</span>
+
+	<span class="c1">// compute sign bit</span>
+	<span class="n">u32</span> <span class="n">zSign</span> <span class="o">=</span> <span class="n">aSign</span> <span class="o">^</span> <span class="n">bSign</span><span class="p">;</span>
+
+	<span class="c1">// removed: handle edge conditions where the exponent is about to overflow</span>
+	<span class="c1">// see the SoftFloat library for more information</span>
+
+	<span class="c1">// compute exponent</span>
+	<span class="n">u32</span> <span class="n">zExp</span> <span class="o">=</span> <span class="n">aExp</span> <span class="o">+</span> <span class="n">bExp</span> <span class="o">-</span> <span class="mh">0x7F</span><span class="p">;</span>
+
+	<span class="c1">// add implicit `1' bit</span>
+	<span class="n">aFrac</span> <span class="o">=</span> <span class="p">(</span><span class="n">aFrac</span> <span class="o">|</span> <span class="mh">0x00800000</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">7</span><span class="p">;</span>
+	<span class="n">bFrac</span> <span class="o">=</span> <span class="p">(</span><span class="n">bFrac</span> <span class="o">|</span> <span class="mh">0x00800000</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">;</span>
+
+	<span class="n">u64</span> <span class="n">zFrac</span> <span class="o">=</span> <span class="p">(</span><span class="n">u64</span><span class="p">)</span><span class="n">aFrac</span> <span class="o">*</span> <span class="p">(</span><span class="n">u64</span><span class="p">)</span><span class="n">bFrac</span><span class="p">;</span>
+
+	<span class="n">u32</span> <span class="n">zFrac0</span> <span class="o">=</span> <span class="n">zFrac</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">zFrac1</span> <span class="o">=</span> <span class="n">zFrac</span> <span class="o">&amp;</span> <span class="mh">0xFFFFFFFF</span><span class="p">;</span>
+
+	<span class="c1">// check if we overflowed into more than 23-bits and handle accordingly</span>
+	<span class="n">zFrac0</span> <span class="o">|=</span> <span class="p">(</span><span class="n">zFrac1</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="k">if</span><span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="p">(</span><span class="n">i32</span><span class="p">)(</span><span class="n">zFrac0</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">))</span>
+	<span class="p">{</span>
+		<span class="n">zFrac0</span> <span class="o">&lt;&lt;=</span> <span class="mi">1</span><span class="p">;</span>
+		<span class="n">zExp</span><span class="o">--</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="c1">// reconstruct the float; I've removed the rounding code and just truncate</span>
+	<span class="k">return</span> <span class="p">(</span><span class="n">zSign</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span><span class="p">)</span> <span class="o">|</span> <span class="p">((</span><span class="n">zExp</span> <span class="o">&lt;&lt;</span> <span class="mi">23</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">zFrac</span> <span class="o">&gt;&gt;</span> <span class="mi">7</span><span class="p">));</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><img src="/assets/img/muldiagram.png" alt="image" /></p>
+
+<h1 id="addition">Addition</h1>
+
+<p>Again, the steps for floating point addition are based on calculating with scientific notation. First you align the exponents, then you add the mantissas. The alignment step is the reason for the big inaccuracies with adding small and large numbers together.</p>
+
+<ol>
+  <li>Align binary point
+    <ol>
+      <li>If <code class="highlighter-rouge">Aexponent &gt; Bexponent</code> Then do <code class="highlighter-rouge">mantissa &gt;&gt;= 1</code> until <code class="highlighter-rouge">Bmantissa * 2^(Bexponent - Aexponent)</code></li>
+      <li>If <code class="highlighter-rouge">Bexponent &gt; Aexponent</code> Then do <code class="highlighter-rouge">Amantissa &gt;&gt;= 1</code> until <code class="highlighter-rouge">Amantissa * 2^(Aexponent - Bexponent)</code></li>
+      <li>Compute sum of aligned mantissas
+        <ol>
+          <li><code class="highlighter-rouge">Amantissa * 2^(Aexponent - Bexponent) + Bmantissa</code></li>
+          <li>Or <code class="highlighter-rouge">Bmantissa * 2^(Bexponent - Aexponent) + Amantissa</code></li>
+          <li>Normalized and round results</li>
+          <li>Check for exponent overflow and throw corresponding overflow errors</li>
+          <li>If <code class="highlighter-rouge">Cmantissa</code> is zero set the entire float to zero to return a ‘correct’ 0 float.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+</ol>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// implementation only works with a and b of equal sign</span>
+<span class="c1">// if a and b are of different sign, we call float32_sub instead</span>
+<span class="c1">// look at the SoftFloat source-code for specifics.</span>
+<span class="k">static</span> <span class="n">f32</span> <span class="nf">float32_add</span><span class="p">(</span><span class="n">f32</span> <span class="n">a</span><span class="p">,</span> <span class="n">f32</span> <span class="n">b</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">int</span> <span class="n">zExp</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">zFrac</span><span class="p">;</span>
+
+	<span class="n">u32</span> <span class="n">aFrac</span> <span class="o">=</span> <span class="n">a</span> <span class="o">&amp;</span> <span class="mh">0x007FFFFF</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">bFrac</span> <span class="o">=</span> <span class="n">b</span> <span class="o">&amp;</span> <span class="mh">0x007FFFFF</span><span class="p">;</span>
+
+	<span class="kt">int</span> <span class="n">aExp</span> <span class="o">=</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;&gt;</span> <span class="mi">23</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0xFF</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">bExp</span> <span class="o">=</span> <span class="p">(</span><span class="n">b</span> <span class="o">&gt;&gt;</span> <span class="mi">23</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0xFF</span><span class="p">;</span>
+
+	<span class="n">u32</span> <span class="n">aSign</span> <span class="o">=</span> <span class="n">a</span> <span class="o">&gt;&gt;</span> <span class="mi">31</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">bSign</span> <span class="o">=</span> <span class="n">b</span> <span class="o">&gt;&gt;</span> <span class="mi">31</span><span class="p">;</span>
+
+	<span class="n">u32</span> <span class="n">zSign</span> <span class="o">=</span> <span class="n">aSign</span><span class="p">;</span>
+
+	<span class="kt">int</span> <span class="n">expDiff</span> <span class="o">=</span> <span class="n">aExp</span> <span class="o">-</span> <span class="n">bExp</span><span class="p">;</span>
+	<span class="n">aFrac</span> <span class="o">&lt;&lt;=</span> <span class="mi">6</span><span class="p">;</span>
+	<span class="n">bFrac</span> <span class="o">&lt;&lt;=</span> <span class="mi">6</span><span class="p">;</span>
+
+	<span class="c1">// align exponents if needed</span>
+	<span class="k">if</span><span class="p">(</span><span class="n">expDiff</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+	<span class="p">{</span>
+		<span class="k">if</span><span class="p">(</span><span class="n">bExp</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">--</span><span class="n">expDiff</span><span class="p">;</span>
+		<span class="k">else</span> <span class="n">bFrac</span> <span class="o">|=</span> <span class="mh">0x20000000</span><span class="p">;</span>
+
+		<span class="n">bFrac</span> <span class="o">=</span> <span class="n">shift32RightJamming</span><span class="p">(</span><span class="n">bFrac</span><span class="p">,</span> <span class="n">expDiff</span><span class="p">);</span>
+		<span class="n">zExp</span> <span class="o">=</span> <span class="n">aExp</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">expDiff</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+	<span class="p">{</span>
+		<span class="k">if</span><span class="p">(</span><span class="n">aExp</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">++</span><span class="n">expDiff</span><span class="p">;</span>
+		<span class="k">else</span> <span class="n">aFrac</span> <span class="o">|=</span> <span class="mh">0x20000000</span><span class="p">;</span>
+
+		<span class="n">aFrac</span> <span class="o">=</span> <span class="n">shift32RightJamming</span><span class="p">(</span><span class="n">aFrac</span><span class="p">,</span> <span class="o">-</span><span class="n">expDiff</span><span class="p">);</span>
+		<span class="n">zExp</span> <span class="o">=</span> <span class="n">bExp</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">expDiff</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+	<span class="p">{</span>
+		<span class="k">if</span><span class="p">(</span><span class="n">aExp</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="p">(</span><span class="n">zSign</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span><span class="p">)</span> <span class="o">|</span> <span class="p">((</span><span class="n">aFrac</span> <span class="o">+</span> <span class="n">bFrac</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">13</span><span class="p">);</span>
+
+		<span class="n">zFrac</span> <span class="o">=</span> <span class="mh">0x40000000</span> <span class="o">+</span> <span class="n">aFrac</span> <span class="o">+</span> <span class="n">bFrac</span><span class="p">;</span>
+		<span class="n">zExp</span> <span class="o">=</span> <span class="n">aExp</span><span class="p">;</span>
+
+		<span class="k">return</span> <span class="p">(</span><span class="n">zSign</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span><span class="p">)</span> <span class="o">|</span> <span class="p">((</span><span class="n">zExp</span> <span class="o">&lt;&lt;</span> <span class="mi">23</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">zFrac</span> <span class="o">&gt;&gt;</span> <span class="mi">7</span><span class="p">));</span>
+	<span class="p">}</span>
+
+	<span class="n">aFrac</span> <span class="o">|=</span> <span class="mh">0x20000000</span><span class="p">;</span>
+	<span class="n">zFrac</span> <span class="o">=</span> <span class="p">(</span><span class="n">aFrac</span> <span class="o">+</span> <span class="n">bFrac</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">;</span>
+	<span class="o">--</span><span class="n">zExp</span><span class="p">;</span>
+
+	<span class="k">if</span><span class="p">((</span><span class="n">i32</span><span class="p">)</span><span class="n">zFrac</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+	<span class="p">{</span>
+		<span class="n">zFrac</span> <span class="o">=</span> <span class="n">aFrac</span> <span class="o">+</span> <span class="n">bFrac</span><span class="p">;</span>
+		<span class="o">++</span><span class="n">zExp</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="c1">// reconstruct the float; I've removed the rounding code and just truncate</span>
+	<span class="k">return</span> <span class="p">(</span><span class="n">zSign</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span><span class="p">)</span> <span class="o">|</span> <span class="p">((</span><span class="n">zExp</span> <span class="o">&lt;&lt;</span> <span class="mi">23</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">zFrac</span> <span class="o">&gt;&gt;</span> <span class="mi">7</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="c1">// for reference</span>
+<span class="k">static</span> <span class="n">u32</span> <span class="nf">shift32RightJamming</span><span class="p">(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">count</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="k">if</span><span class="p">(</span><span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="n">a</span><span class="p">;</span>
+  <span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">count</span> <span class="o">&lt;</span> <span class="mi">32</span><span class="p">)</span> <span class="k">return</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;&gt;</span> <span class="n">count</span><span class="p">)</span> <span class="o">|</span> <span class="p">((</span><span class="n">a</span> <span class="o">&lt;&lt;</span> <span class="p">((</span><span class="o">-</span><span class="n">count</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">31</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="k">else</span> <span class="k">return</span> <span class="n">a</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>An overview of floating point addition hardware. The implementation will make a distinction between adding numbers where the exponent differs (the far path) and numbers where the exponent is the same (the close path), much like the implementation above.</p>
+
+<p><img src="/assets/img/adddiagram1.png" alt="image" /></p>
+
+<h1 id="fused-multiply-add">Fused-multiply-add</h1>
+
+<p>The multiply-add operation is basically a combination of both of these operations that is as efficient or more efficient to implement in hardware as both operations separately. The primary difference in operation is (as long as it’s not a pseudo-fma) is the fact that there is only one rounding operation done at the end of the result, instead of one in the multiply and the add circuits (steps 3 and 4 respectively).</p>
+
+<p>Some, if not most, SIMD architectures on current-gen platforms are actually built around just the fused-multiply-add and don’t have regular multiply or addition hardware (they’ll just insert identity constants into one of the three operands) a simple give-away for this is usually that the cycle count for these operations is identical in each case.</p>
+
+<p><img src="/assets/img/fmadiagram.png" alt="image" /></p>
+
+<h1 id="further-reading">Further Reading</h1>
+
+<p><em>Single precision floating-point format.</em> (2011, June 19).
+Retrieved Juli 2011, from Wikipedia: <a href="http://en.wikipedia.org/wiki/Single_precision_floating-point_format">http://en.wikipedia.org/wiki/Single_precision_floating-point_format
+</a></p>
+
+<p>Quinnell, E. C. (2007, May). <em>Floating-Point Fused Multiply-Add Architectures.</em> Retrieved June 2011, from <a href="http://repositories.lib.utexas.edu/bitstream/handle/2152/3082/quinnelle60861.pdf">http://repositories.lib.utexas.edu/bitstream/handle/2152/3082/quinnelle60861.pdf</a></p>
+
+<p>Shaadan, D. M. (2000, Januari). <em>Floating Point Arithmetic Using The IEEE 754 Standard</em> Revisited. Retrieved June 2011, from <a href="http://meseec.ce.rit.edu/eecc250-winter99/250-1-27-2000.pdf">http://meseec.ce.rit.edu/eecc250-winter99/250-1-27-2000.pdf</a></p>
+
+<p>Hauser, J. (2010, June). <em>SoftFloat Retrieved June 2011</em>, from <a href="http://www.jhauser.us/arithmetic/SoftFloat.html">http://www.jhauser.us/arithmetic/SoftFloat.html</a></p>
+
+<p>Giesen, F. (2011, July). <em>Int-multiply-using-floats trickery</em> Retrieved July 2011, from <a href="http://pastebin.com/jyT0gTSS">http://pastebin.com/jyT0gTSS</a></p>
+
+        </div>
+
+        
+          <div class="page-share">
+  <a href="https://www.facebook.com/sharer/sharer.php?u=http%3A%2F%2Flocalhost%3A4000%2Fposts%2Ffloating-point%2F" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" class="btn btn--facebook btn--small"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i> <span>Share</span></a>
+  <a href="https://twitter.com/intent/tweet?text=In-depth%3A+IEEE+754+Multiplication+And+Addition%20http%3A%2F%2Flocalhost%3A4000%2Fposts%2Ffloating-point%2F" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" class="btn btn--twitter btn--small"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i> <span>Tweet</span></a>
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=http%3A%2F%2Flocalhost%3A4000%2Fposts%2Ffloating-point%2F" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" class="btn btn--linkedin btn--small"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> <span>LinkedIn</span></a>
+  <a href="https://reddit.com/submit?title=In-depth%3A+IEEE+754+Multiplication+And+Addition&url=http%3A%2F%2Flocalhost%3A4000%2Fposts%2Ffloating-point%2F" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" class="btn btn--reddit btn--small"><i class="fab fa-fw fa-reddit" aria-hidden="true"></i> <span>Reddit</span></a>
+</div>
+
+        
+
+        
+          
+
+        
+
+        <nav class="page-pagination" role="navigation">
+  
+    <a class="page-previous" href="/posts/partical-mlaa-gpu/">
+      <h4 class="page-pagination-label">Previous</h4>
+      <span class="page-pagination-title">
+        <i class="fas fa-arrow-left"></i> Practical MLAA on the GPU – My take
+
+      </span>
+    </a>
+  
+
+  
+</nav>
+
+      </div>
+    </div>
+  </article>
+</main>
+
+
+    <footer id="footer" class="site-footer">
+  <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+<div class="social-icons"><a class="social-icon" href="https://twitter.com/JasperBekkers"><i class="fab fa-twitter-square fa-2x" title="Twitter"></i></a><a class="social-icon" href="https://github.com/Jasper-Bekkers"><i class="fab fa-github-square fa-2x" title="GitHub"></i></a><a class="social-icon" href="/atom.xml"><i class="fas fa-rss-square fa-2x" title="Feed"></i></a></div><div class="copyright">
+    
+      <p>© Jasper Bekkers</p>
+
+    
+  </div>
+</footer>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://use.fontawesome.com/releases/v5.0.12/js/all.js"></script>
+
+
+<!-- MathJax -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  </body>
+
+</html>

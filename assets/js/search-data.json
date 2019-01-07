@@ -1,0 +1,56 @@
+var store = [{
+        "title": "OTOY: Brigade",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/1000-brigade/"
+      },{
+        "title": "Deus Ex: Human Revolution",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/992-deus-ex-hr/"
+      },{
+        "title": "Battlefield 3",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/993-bf-3/"
+      },{
+        "title": "NFS: The Run",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/994-nfs-the-run/"
+      },{
+        "title": "Battlefield: Hardline",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/995-bf-hardline/"
+      },{
+        "title": "NFS: Rivals",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/996-nfs-rivals/"
+      },{
+        "title": "Dragon Age: Inquisition",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/997-dragon-age/"
+      },{
+        "title": "Mirrors Edge",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/998-mirrors-edge/"
+      },{
+        "title": "Star Wars: Battlefront",
+        "excerpt":"Oatmeal cookies are a proverbial favorite with both kids and adults. This crisp and chewy cookie is loaded with oats, dried fruit, and chopped nuts. Ingredients 1 cup butter, softened 1 cup white sugar 1 cup packed brown sugar 2 eggs 1 teaspoon vanilla extract 2 cups all-purpose flour 1...","categories": [],
+        "tags": [],
+        "url": "http://localhost:4000/portfolio/999-battlefront/"
+      },{
+        "title": "Practical MLAA on the GPU – My take",
+        "excerpt":"Practical MLAA on the GPU – My takeIn days where FXAA seems to be the anti-aliasing method of choice, due to it being easy to implement and fast to execute. I’m going to take a look at how the “French MLAA paper” (Interactive Summed-Area Table Generation for Glossy Environmental Reﬂections)....","categories": ["posts"],
+        "tags": [],
+        "url": "http://localhost:4000/posts/partical-mlaa-gpu/"
+      },{
+        "title": "In-depth: IEEE 754 Multiplication And Addition",
+        "excerpt":"To me, programming has always been an exercise in understanding blackboxes. About taking systems apart and figuring out their internal workings. And although this teaches you about how other programmers think and work it does take away some of the amazement you have when seeing a cleverly written piece of...","categories": ["posts"],
+        "tags": [],
+        "url": "http://localhost:4000/posts/floating-point/"
+      }]

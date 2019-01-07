@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<!--
+    So Simple Jekyll Theme 3.1.1
+    Copyright 2013-2018 Michael Rose - mademistakes.com | @mmistakes
+    Free for personal and commercial use under the MIT license
+    https://github.com/mmistakes/so-simple-theme/blob/master/LICENSE
+-->
+<html lang="en-US" class="no-js">
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  
+
+  
+    
+    <!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>Practical MLAA on the GPU – My take | My Awesome Site</title>
+<meta name="generator" content="Jekyll v3.8.3" />
+<meta property="og:title" content="Practical MLAA on the GPU – My take" />
+<meta name="author" content="Jasper Bekkers" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Practical MLAA on the GPU – My take In days where FXAA seems to be the anti-aliasing method of choice, due to it being easy to implement and fast to execute. I’m going to take a look at how the “French MLAA paper” (Interactive Summed-Area Table Generation for Glossy Environmental Reﬂections). And second, because the code is quite hard to understand if you don’t know any French (I don’t, and because of this I might have made some mistakes; bear with me)." />
+<meta property="og:description" content="Practical MLAA on the GPU – My take In days where FXAA seems to be the anti-aliasing method of choice, due to it being easy to implement and fast to execute. I’m going to take a look at how the “French MLAA paper” (Interactive Summed-Area Table Generation for Glossy Environmental Reﬂections). And second, because the code is quite hard to understand if you don’t know any French (I don’t, and because of this I might have made some mistakes; bear with me)." />
+<link rel="canonical" href="http://localhost:4000/posts/partical-mlaa-gpu/" />
+<meta property="og:url" content="http://localhost:4000/posts/partical-mlaa-gpu/" />
+<meta property="og:site_name" content="My Awesome Site" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2011-12-06T18:36:05+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:site" content="@JasperBekkers" />
+<meta name="twitter:creator" content="@JasperBekkers" />
+<script type="application/ld+json">
+{"description":"Practical MLAA on the GPU – My take In days where FXAA seems to be the anti-aliasing method of choice, due to it being easy to implement and fast to execute. I’m going to take a look at how the “French MLAA paper” (Interactive Summed-Area Table Generation for Glossy Environmental Reﬂections). And second, because the code is quite hard to understand if you don’t know any French (I don’t, and because of this I might have made some mistakes; bear with me).","author":{"@type":"Person","name":"Jasper Bekkers"},"@type":"BlogPosting","url":"http://localhost:4000/posts/partical-mlaa-gpu/","publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/jb-logo.png"},"name":"Jasper Bekkers"},"headline":"Practical MLAA on the GPU – My take","dateModified":"2011-12-06T18:36:05+01:00","datePublished":"2011-12-06T18:36:05+01:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/partical-mlaa-gpu/"},"@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+  
+
+  <script>
+    /* Cut the mustard */
+    if ( 'querySelector' in document && 'addEventListener' in window ) {
+      document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + 'js';
+    }
+  </script>
+
+  <link rel="stylesheet" href="/assets/css/main.css">
+  
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,400i,700,700i|Lora:400,400i,700,700i">
+  <link rel="alternate" type="application/atom+xml" title="My Awesome Site" href="/atom.xml">
+<!-- start custom head snippets -->
+
+<!-- insert favicons. use http://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+
+</head>
+
+
+  <body class="layout--post  practical-mlaa-on-the-gpu-my-take">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#primary-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    
+  <div class="navigation-wrapper">
+    <a href="#menu-toggle" id="menu-toggle">Menu</a>
+    <nav id="primary-nav" class="site-nav animated drop">
+      <ul><li><a href="/">Home</a></li><li><a href="/posts/">Posts</a></li><li><a href="/portfolio/">Portfolio</a></li></ul>
+    </nav>
+  </div><!-- /.navigation-wrapper -->
+
+
+    <header class="masthead">
+  <div class="wrap">
+    
+      <a href="/" class="site-logo" rel="home" title="My Awesome Site">
+        <img src="/assets/img/jb-logo.png" class="site-logo-img animated fadeInDown" alt="My Awesome Site">
+      </a>
+    
+    
+      <h1 class="site-title animated fadeIn"><a href="/">My Awesome Site</a></h1>
+      <p class="site-description animated fadeIn" itemprop="description">It really is the best.</p>
+    
+  </div>
+</header><!-- /.masthead -->
+
+
+    <main id="main" class="main-content" aria-label="Content">
+  <article class="h-entry">
+    
+
+    <div class="page-wrapper">
+      <header class="page-header">
+        
+        
+          <h1 id="page-title" class="page-title p-name">Practical MLAA on the GPU – My take
+</h1>
+        
+      </header>
+
+      <div class="page-sidebar">
+        <div class="page-author h-card p-author"><div class="author-info"><div class="author-name">
+        <em>by</em> <span class="p-name">Jasper Bekkers</span>
+      </div>
+
+<span class="read-time">5 min read</span>
+
+    <time class="page-date dt-published" datetime="2011-12-06T18:36:05+01:00"><a class="u-url" href="">December 6, 2011</a>
+</time>
+
+  </div>
+</div>
+
+        
+  <h3 class="page-taxonomies-title">Categories</h3>
+  <ul class="page-taxonomies"><li class="page-taxonomy">posts</li>
+  </ul>
+
+
+        
+
+      </div>
+
+      <div class="page-content">
+        <div class="e-content">
+          <p>Practical MLAA on the GPU – My take
+In days where FXAA seems to be the anti-aliasing method of choice, due to it being easy to implement and fast to execute. I’m going to take a look at how the “French MLAA paper” (<a href="https://developer.amd.com/wordpress/media/2012/10/SATsketch-siggraph05.pdf">Interactive Summed-Area Table Generation for Glossy Environmental Reﬂections</a>). And second, because the code is quite hard to understand if you don’t know any French (I don’t, and because of this I might have made some mistakes; bear with me).</p>
+
+<h1 id="overview">Overview</h1>
+<p>The algorithm consists of 4 different steps implemented in 5 different shaders to accomplish what Crytek calls a fancy edge blur. I’ll outline the steps first and then go into detail about what each part does.</p>
+
+<ol>
+  <li>Edge detection</li>
+  <li>Count line lengths of <code class="highlighter-rouge">log4(maxLineLength)</code> passes</li>
+  <li>Determine blend weights</li>
+  <li>Blur (I won’t go into this here because it’s a simple blur filter based on the previously calculated weights)</li>
+</ol>
+
+<h1 id="edge-detection">Edge detection</h1>
+<p>Although there are many ways to do edge detection in a pixel shader, the paper decided to implement this using a difference based on color, it makes sense to do this because blurring edges based on normal/depth. And as it turns the most recent version at the time of writing also supports color + depth edge detection. Currently the shader is implemented by converting colors to <a href="http://en.wikipedia.org/wiki/Lab_color_space">LAB color space</a> and calculating a Euclidian distance between two colors and optionally do a depth compare; when this distance exceeds a certain threshold you have your edge.</p>
+
+<p>The paper uses and outputs to two textures, a mask and the texture used to count line lengths and they are laid out like this:</p>
+
+<ul>
+  <li>The mask consists of 2 channels:
+    <ul>
+      <li>R gets a 1 if there is a horizontal edge (zero otherwise)</li>
+      <li>G gets a 1 if there is a vertical edge (zero otherwise)</li>
+      <li>The line length texture consists of 4 channels:
+        <ul>
+          <li>B and A get a value of <code class="highlighter-rouge">1/255</code> if there is a horizontal discrepancy (zero otherwise)</li>
+          <li>R and G get a value of <code class="highlighter-rouge">1/255</code> if there is a vertical discrepancy (zero otherwise)
+            <ul>
+              <li>If there is a horizontal discrepancy, this means that there is a vertical line and vice versa! Keep this in mind for the Count line lengths shader.</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p>For my implementation I dropped the mask because the line length texture can serve the exact same purpose, except that it’s data is in different channels and checks of equals 1 should be converted to doesn’t equal 0. This made the flow of the algorithm a lot easier and saved some memory.</p>
+
+<h1 id="count-line-lengths">Count line lengths</h1>
+<p>The process of determining the line lengths uses a technique called recursive doubling which is the reason this part of the process gets it’s logarithmic runtime performance of O(log4(maxLineLength)) this basically comes down to doing 4 passes for a maximum length of 256 pixels. To see how this works we should first see exactly how the line-length buffer is structured.</p>
+
+<p>Basically, the R channel stores how many pixels a certain line has to the left of it and the G channel stores how many there are to the right; this means that for each pixel you can look up the length of the edge by summing up either the R and G channels for horizontal length and the R and G channels for vertical length.</p>
+
+<p>[image]*(asdsdf)</p>
+
+<p>The gist of the algorithm is pretty simple and I’ll go over it briefly. Just keep in mind that the following loop is done per channel (eg. 4 times).</p>
+
+<div class="language-glsl highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// PreviousLengths is initialized to 1.f/255.f for edges and 0 for non-edges</span>
+<span class="n">float4</span> <span class="n">currentLengths</span> <span class="o">=</span> <span class="n">tex2D</span><span class="p">(</span><span class="n">PreviousLengths</span><span class="p">,</span> <span class="n">Tex</span><span class="p">);</span>
+<span class="n">float4</span> <span class="n">currentDelta</span> <span class="o">=</span> <span class="n">currentLengths</span> <span class="o">*</span> <span class="n">PixelSize</span><span class="p">.</span><span class="n">zzww</span><span class="p">;</span>
+<span class="k">const</span> <span class="kt">float</span> <span class="n">Threshold</span> <span class="o">=</span> <span class="n">Level</span> <span class="o">/</span> <span class="mi">255</span><span class="p">.</span><span class="n">f</span><span class="p">;</span>
+ 
+<span class="k">if</span><span class="p">(</span><span class="n">currentLengths</span><span class="p">.</span><span class="n">r</span> <span class="o">&gt;=</span> <span class="n">Threshold</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">float2</span> <span class="n">newTex</span> <span class="o">=</span> <span class="n">Tex</span> <span class="o">-</span> <span class="n">float2</span><span class="p">(</span><span class="n">currentDelta</span><span class="p">.</span><span class="n">r</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">k</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">k</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">;</span> <span class="n">k</span><span class="o">++</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="kt">float</span> <span class="n">oneDelta</span> <span class="o">=</span> <span class="n">tex2D</span><span class="p">(</span><span class="n">PreviousLengths</span><span class="p">,</span> <span class="n">newTex</span><span class="p">).</span><span class="n">r</span><span class="p">;</span>
+        <span class="n">currentLengths</span><span class="p">.</span><span class="n">r</span> <span class="o">+=</span> <span class="n">oneDelta</span><span class="p">;</span>
+        <span class="n">newTex</span><span class="p">.</span><span class="n">x</span> <span class="o">-=</span> <span class="n">oneDelta</span> <span class="o">*</span> <span class="n">PixelSize</span><span class="p">.</span><span class="n">z</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>For the first pass Level is initialized to 1 (then to 4, 16 and 64) so this check only does the length count only if it thinks it should still be counting the lengths of the edges. PixelSize is initialized to <code class="highlighter-rouge">(1/width, 1/height, 255/width, 255/height)</code> so when multiplying by zzww we convert between increments in 1/255th to increments in <code class="highlighter-rouge">1/width</code> and <code class="highlighter-rouge">1/height</code>.</p>
+
+<p>The interesting part, however, is inside the loop as it moves more pixels to the side depending on the value in the R channel it retrieves. This has a effect that if the value at that pixel is 0, nothing changes and currentLengths doesn’t get incremented.</p>
+
+<p><a href="">image</a>a;lksjdflasdf</p>
+
+<p>When doing normal point-sampling when you reach 0 you’ll know the line has ended and the loop makes sure you stop there. Hower; as shown by Nicolas Vizerie in MLAA (MorphoLogical AntiAliasing) on the GPU using Direct3D9.0 using bilinear filtering can reduce the amount of texture fetches by testing two lines at a time.</p>
+
+<h1 id="determine-blend-weights">Determine blend weights</h1>
+<p>The blend weights are calculated from a pre-generated lookup table (look for tabAires in the source-code, I didn’t bother to re-implement it). However, the basic gist of the table is that on the vertical axis is the size (eg. the sum of two channels in the LineLength texture) of the line and on the horizontal is the size in one direction (eg. one of the two channels in the LineLength texture). The content of the table are the areas below the triangles that the edges form and they are almost all handled by the formula  <code class="highlighter-rouge">0.5 * (1. - (2 * j + 1) / (float)S)</code> the other formulas in the lookup table are there to help in edge cases where the equation tails off.  Each pixel in the lookup table has a range of <code class="highlighter-rouge">0.25 &lt; pixelvalue &lt; 0.5</code> because the blending of a certain pixel has a maximum contribution of four other pixels.</p>
+
+<p>The shader, although lengthy has quite a straightforward implementation that basically checks the endpoints of the lines to see if there is exists an edge orthogonal to it. If that’s the case, it uses the shortest of the two line-segments and the total size of the original line to determine the weights in the lookup table. This process is done four times:</p>
+
+<ul>
+  <li>Horizontal for current pixel</li>
+  <li>Vertical for current pixel</li>
+  <li>Horizontal for one pixel to the left</li>
+  <li>Vertical for one pixel above</li>
+</ul>
+
+<h1 id="further-references">Further references</h1>
+<ul>
+  <li><a href="https://web.archive.org/web/20120911001541/http://divergentcoder.com:80/rendering/mlaa-demo-2/">MLAA Demo 2 by @synulation Optimized DX10 version of the previous version of the shader.</a></li>
+  <li><a href="http://www.iryoku.com/mlaa/">Practical Morphological Anti-Aliasing Other MLAA on the GPU technique</a>.</li>
+  <li><a href="https://web.archive.org/web/20140421111419/http://www.vizerie3d.net:80/">MLAA (MorphoLogical AntiAliasing) on the GPU using Direct3D9.0 Another MLAA implementation (also uses the old version of the paper).</a></li>
+  <li><a href="https://web.archive.org/web/20160320103906/http://igm.univ-mlv.fr/~biri/mlaa-gpu/">Morphological Antialiasing on GPU</a></li>
+  <li><a href="http://developer.amd.com/wordpress/media/2012/10/SATsketch-siggraph05.pdf">Interactive Summed-Area Table Generation for Glossy Environmental Reflections</a></li>
+</ul>
+
+        </div>
+
+        
+          <div class="page-share">
+  <a href="https://www.facebook.com/sharer/sharer.php?u=http%3A%2F%2Flocalhost%3A4000%2Fposts%2Fpartical-mlaa-gpu%2F" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" class="btn btn--facebook btn--small"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i> <span>Share</span></a>
+  <a href="https://twitter.com/intent/tweet?text=Practical+MLAA+on+the+GPU+%E2%80%93+My+take%20http%3A%2F%2Flocalhost%3A4000%2Fposts%2Fpartical-mlaa-gpu%2F" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" class="btn btn--twitter btn--small"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i> <span>Tweet</span></a>
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=http%3A%2F%2Flocalhost%3A4000%2Fposts%2Fpartical-mlaa-gpu%2F" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" class="btn btn--linkedin btn--small"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> <span>LinkedIn</span></a>
+  <a href="https://reddit.com/submit?title=Practical+MLAA+on+the+GPU+%E2%80%93+My+take&url=http%3A%2F%2Flocalhost%3A4000%2Fposts%2Fpartical-mlaa-gpu%2F" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" class="btn btn--reddit btn--small"><i class="fab fa-fw fa-reddit" aria-hidden="true"></i> <span>Reddit</span></a>
+</div>
+
+        
+
+        
+          
+
+        
+
+        <nav class="page-pagination" role="navigation">
+  
+
+  
+    <a class="page-next" href="/posts/floating-point/">
+      <h4 class="page-pagination-label">Next</h4>
+      <span class="page-pagination-title">
+        In-depth: IEEE 754 Multiplication And Addition
+ <i class="fas fa-arrow-right"></i>
+      </span>
+    </a>
+  
+</nav>
+
+      </div>
+    </div>
+  </article>
+</main>
+
+
+    <footer id="footer" class="site-footer">
+  <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+<div class="social-icons"><a class="social-icon" href="https://twitter.com/JasperBekkers"><i class="fab fa-twitter-square fa-2x" title="Twitter"></i></a><a class="social-icon" href="https://github.com/Jasper-Bekkers"><i class="fab fa-github-square fa-2x" title="GitHub"></i></a><a class="social-icon" href="/atom.xml"><i class="fas fa-rss-square fa-2x" title="Feed"></i></a></div><div class="copyright">
+    
+      <p>© Jasper Bekkers</p>
+
+    
+  </div>
+</footer>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://use.fontawesome.com/releases/v5.0.12/js/all.js"></script>
+
+
+<!-- MathJax -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  </body>
+
+</html>

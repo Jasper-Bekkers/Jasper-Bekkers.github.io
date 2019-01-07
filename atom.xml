@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.8.3">Jekyll</generator><link href="http://localhost:4000/atom.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2018-09-21T15:33:53+02:00</updated><id>http://localhost:4000/</id><title type="html">My Awesome Site</title><subtitle>It really is the best.</subtitle><author><name>Jasper Bekkers</name><email>bekkers@gmail.com</email></author><entry><title type="html">In-depth: IEEE 754 Multiplication And Addition</title><link href="http://localhost:4000/posts/floating-point/" rel="alternate" type="text/html" title="In-depth: IEEE 754 Multiplication And Addition" /><published>2011-12-06T18:36:05+01:00</published><updated>2011-12-06T18:36:05+01:00</updated><id>http://localhost:4000/posts/floating-point</id><content type="html" xml:base="http://localhost:4000/posts/floating-point/">&lt;p&gt;To me, programming has always been an exercise in understanding blackboxes. About taking systems apart and figuring out their internal workings. And although this teaches you about how other programmers think and work it does take away some of the amazement you have when seeing a cleverly written piece of code.&lt;/p&gt;
+
+&lt;p&gt;For me, and for a lot of other programmers, floating point numbers have for the longest time been one of these blackboxes. There is a lot of (good and bad) information on the web about floating points, most of it describes the data format, how the bits are interpreted, what epsilon values you should use or how to deal with accuracy issues in floats. Hardly any article talks about where all of this actually comes from or how fundamental floating point operations are implemented.&lt;/p&gt;
+
+&lt;p&gt;So in this article I will talk about how some of these operations are implemented, specifically multiplication, addition and fused-multiply-add. I won’t talk about decimal-to-float conversions, float-to-double or float-to-int casts, division, comparisons or trigonometry functions. If you’re interested in these I suggest taking a look at John Hauser’s excellent SoftFloat library listed below. It’s the same library I’ve used to borrow the code samples in this article from.&lt;/p&gt;
+
+&lt;p&gt;For convenience sake I’ll also show an image of the floating point data layout taken from wikipedia because this might help explain some of the magic numbers and masks used in the code below. The hardware diagrams are taken from the “Floating-Point Fused Multiply-Add Architectures” paper linked below and are diagrams for double precision implementations (this due to me being unable to produce these pretty pictures myself). Keep that in mind when reading them.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/img/ieee754_32bit_float_format.png&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;multiplication&quot;&gt;Multiplication&lt;/h1&gt;
+
+&lt;p&gt;The way IEEE 754 multiplication works is identical to how it works for regular scientific notation. Simply multiply the coefficients and add the exponents. However, because this is done in hardware we have some extra constraints, such as overflow and rounding, to take into account. These extra constraints are what make floats appear so ‘fuzzy’ to some.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Check if either of the operands (A and B) are zero (early out)&lt;/li&gt;
+  &lt;li&gt;Check for potential exponent overflow and throw corresponding overflow errors&lt;/li&gt;
+  &lt;li&gt;Compute sign as &lt;code class=&quot;highlighter-rouge&quot;&gt;Csign = Asign XOR Bsign&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;Compute the exponent &lt;code class=&quot;highlighter-rouge&quot;&gt;Cexponent = Aexponent + Bexponent - 127&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;Compute mantissa Cmantissa = &lt;code class=&quot;highlighter-rouge&quot;&gt;Amantissa * Bmantissa&lt;/code&gt; (23-bit integer multiply) and round the result according to the currently set rounding mode.&lt;/li&gt;
+  &lt;li&gt;If Cmantissa has overflown, normalize results (&lt;code class=&quot;highlighter-rouge&quot;&gt;Cmantissa &amp;lt;&amp;lt;= 1&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;Cexponent -= 1&lt;/code&gt;)&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;f32&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;float32_mul&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;c1&quot;&gt;// extract mantissa, exponent and sign&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x007FFFFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x007FFFFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;c1&quot;&gt;// compute sign bit&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;^&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bSign&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;c1&quot;&gt;// removed: handle edge conditions where the exponent is about to overflow&lt;/span&gt;
+	&lt;span class=&quot;c1&quot;&gt;// see the SoftFloat library for more information&lt;/span&gt;
+
+	&lt;span class=&quot;c1&quot;&gt;// compute exponent&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x7F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;c1&quot;&gt;// add implicit `1' bit&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x00800000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x00800000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;u64&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;u64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;u64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zFrac0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zFrac1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xFFFFFFFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;c1&quot;&gt;// check if we overflowed into more than 23-bits and handle accordingly&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;zFrac0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zFrac1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zFrac0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;zFrac0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+	&lt;span class=&quot;c1&quot;&gt;// reconstruct the float; I've removed the rounding code and just truncate&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;));&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/img/muldiagram.png&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;addition&quot;&gt;Addition&lt;/h1&gt;
+
+&lt;p&gt;Again, the steps for floating point addition are based on calculating with scientific notation. First you align the exponents, then you add the mantissas. The alignment step is the reason for the big inaccuracies with adding small and large numbers together.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Align binary point
+    &lt;ol&gt;
+      &lt;li&gt;If &lt;code class=&quot;highlighter-rouge&quot;&gt;Aexponent &amp;gt; Bexponent&lt;/code&gt; Then do &lt;code class=&quot;highlighter-rouge&quot;&gt;mantissa &amp;gt;&amp;gt;= 1&lt;/code&gt; until &lt;code class=&quot;highlighter-rouge&quot;&gt;Bmantissa * 2^(Bexponent - Aexponent)&lt;/code&gt;&lt;/li&gt;
+      &lt;li&gt;If &lt;code class=&quot;highlighter-rouge&quot;&gt;Bexponent &amp;gt; Aexponent&lt;/code&gt; Then do &lt;code class=&quot;highlighter-rouge&quot;&gt;Amantissa &amp;gt;&amp;gt;= 1&lt;/code&gt; until &lt;code class=&quot;highlighter-rouge&quot;&gt;Amantissa * 2^(Aexponent - Bexponent)&lt;/code&gt;&lt;/li&gt;
+      &lt;li&gt;Compute sum of aligned mantissas
+        &lt;ol&gt;
+          &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Amantissa * 2^(Aexponent - Bexponent) + Bmantissa&lt;/code&gt;&lt;/li&gt;
+          &lt;li&gt;Or &lt;code class=&quot;highlighter-rouge&quot;&gt;Bmantissa * 2^(Bexponent - Aexponent) + Amantissa&lt;/code&gt;&lt;/li&gt;
+          &lt;li&gt;Normalized and round results&lt;/li&gt;
+          &lt;li&gt;Check for exponent overflow and throw corresponding overflow errors&lt;/li&gt;
+          &lt;li&gt;If &lt;code class=&quot;highlighter-rouge&quot;&gt;Cmantissa&lt;/code&gt; is zero set the entire float to zero to return a ‘correct’ 0 float.&lt;/li&gt;
+        &lt;/ol&gt;
+      &lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// implementation only works with a and b of equal sign&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// if a and b are of different sign, we call float32_sub instead&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// look at the SoftFloat source-code for specifics.&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f32&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;float32_add&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x007FFFFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x007FFFFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aSign&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;expDiff&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bExp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;c1&quot;&gt;// align exponents if needed&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;expDiff&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;expDiff&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x20000000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+		&lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;shift32RightJamming&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;expDiff&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aExp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;expDiff&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;aExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;expDiff&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x20000000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+		&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;shift32RightJamming&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;expDiff&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bExp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;expDiff&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;aExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;13&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+		&lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x40000000&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aExp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+		&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;));&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x20000000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+	&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bFrac&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+		&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+	&lt;span class=&quot;c1&quot;&gt;// reconstruct the float; I've removed the rounding code and just truncate&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zSign&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zExp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zFrac&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;));&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;// for reference&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u32&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;shift32RightJamming&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;31&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;An overview of floating point addition hardware. The implementation will make a distinction between adding numbers where the exponent differs (the far path) and numbers where the exponent is the same (the close path), much like the implementation above.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/img/adddiagram1.png&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;fused-multiply-add&quot;&gt;Fused-multiply-add&lt;/h1&gt;
+
+&lt;p&gt;The multiply-add operation is basically a combination of both of these operations that is as efficient or more efficient to implement in hardware as both operations separately. The primary difference in operation is (as long as it’s not a pseudo-fma) is the fact that there is only one rounding operation done at the end of the result, instead of one in the multiply and the add circuits (steps 3 and 4 respectively).&lt;/p&gt;
+
+&lt;p&gt;Some, if not most, SIMD architectures on current-gen platforms are actually built around just the fused-multiply-add and don’t have regular multiply or addition hardware (they’ll just insert identity constants into one of the three operands) a simple give-away for this is usually that the cycle count for these operations is identical in each case.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/img/fmadiagram.png&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;further-reading&quot;&gt;Further Reading&lt;/h1&gt;
+
+&lt;p&gt;&lt;em&gt;Single precision floating-point format.&lt;/em&gt; (2011, June 19).
+Retrieved Juli 2011, from Wikipedia: &lt;a href=&quot;http://en.wikipedia.org/wiki/Single_precision_floating-point_format&quot;&gt;http://en.wikipedia.org/wiki/Single_precision_floating-point_format
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Quinnell, E. C. (2007, May). &lt;em&gt;Floating-Point Fused Multiply-Add Architectures.&lt;/em&gt; Retrieved June 2011, from &lt;a href=&quot;http://repositories.lib.utexas.edu/bitstream/handle/2152/3082/quinnelle60861.pdf&quot;&gt;http://repositories.lib.utexas.edu/bitstream/handle/2152/3082/quinnelle60861.pdf&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Shaadan, D. M. (2000, Januari). &lt;em&gt;Floating Point Arithmetic Using The IEEE 754 Standard&lt;/em&gt; Revisited. Retrieved June 2011, from &lt;a href=&quot;http://meseec.ce.rit.edu/eecc250-winter99/250-1-27-2000.pdf&quot;&gt;http://meseec.ce.rit.edu/eecc250-winter99/250-1-27-2000.pdf&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Hauser, J. (2010, June). &lt;em&gt;SoftFloat Retrieved June 2011&lt;/em&gt;, from &lt;a href=&quot;http://www.jhauser.us/arithmetic/SoftFloat.html&quot;&gt;http://www.jhauser.us/arithmetic/SoftFloat.html&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Giesen, F. (2011, July). &lt;em&gt;Int-multiply-using-floats trickery&lt;/em&gt; Retrieved July 2011, from &lt;a href=&quot;http://pastebin.com/jyT0gTSS&quot;&gt;http://pastebin.com/jyT0gTSS&lt;/a&gt;&lt;/p&gt;</content><author><name>Jasper Bekkers</name><email>bekkers@gmail.com</email></author><summary type="html">To me, programming has always been an exercise in understanding blackboxes. About taking systems apart and figuring out their internal workings. And although this teaches you about how other programmers think and work it does take away some of the amazement you have when seeing a cleverly written piece of code.</summary></entry><entry><title type="html">Practical MLAA on the GPU – My take</title><link href="http://localhost:4000/posts/partical-mlaa-gpu/" rel="alternate" type="text/html" title="Practical MLAA on the GPU – My take" /><published>2011-12-06T18:36:05+01:00</published><updated>2011-12-06T18:36:05+01:00</updated><id>http://localhost:4000/posts/partical-mlaa-gpu</id><content type="html" xml:base="http://localhost:4000/posts/partical-mlaa-gpu/">&lt;p&gt;Practical MLAA on the GPU – My take
+In days where FXAA seems to be the anti-aliasing method of choice, due to it being easy to implement and fast to execute. I’m going to take a look at how the “French MLAA paper” (&lt;a href=&quot;https://developer.amd.com/wordpress/media/2012/10/SATsketch-siggraph05.pdf&quot;&gt;Interactive Summed-Area Table Generation for Glossy Environmental Reﬂections&lt;/a&gt;). And second, because the code is quite hard to understand if you don’t know any French (I don’t, and because of this I might have made some mistakes; bear with me).&lt;/p&gt;
+
+&lt;h1 id=&quot;overview&quot;&gt;Overview&lt;/h1&gt;
+&lt;p&gt;The algorithm consists of 4 different steps implemented in 5 different shaders to accomplish what Crytek calls a fancy edge blur. I’ll outline the steps first and then go into detail about what each part does.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Edge detection&lt;/li&gt;
+  &lt;li&gt;Count line lengths of &lt;code class=&quot;highlighter-rouge&quot;&gt;log4(maxLineLength)&lt;/code&gt; passes&lt;/li&gt;
+  &lt;li&gt;Determine blend weights&lt;/li&gt;
+  &lt;li&gt;Blur (I won’t go into this here because it’s a simple blur filter based on the previously calculated weights)&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h1 id=&quot;edge-detection&quot;&gt;Edge detection&lt;/h1&gt;
+&lt;p&gt;Although there are many ways to do edge detection in a pixel shader, the paper decided to implement this using a difference based on color, it makes sense to do this because blurring edges based on normal/depth. And as it turns the most recent version at the time of writing also supports color + depth edge detection. Currently the shader is implemented by converting colors to &lt;a href=&quot;http://en.wikipedia.org/wiki/Lab_color_space&quot;&gt;LAB color space&lt;/a&gt; and calculating a Euclidian distance between two colors and optionally do a depth compare; when this distance exceeds a certain threshold you have your edge.&lt;/p&gt;
+
+&lt;p&gt;The paper uses and outputs to two textures, a mask and the texture used to count line lengths and they are laid out like this:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;The mask consists of 2 channels:
+    &lt;ul&gt;
+      &lt;li&gt;R gets a 1 if there is a horizontal edge (zero otherwise)&lt;/li&gt;
+      &lt;li&gt;G gets a 1 if there is a vertical edge (zero otherwise)&lt;/li&gt;
+      &lt;li&gt;The line length texture consists of 4 channels:
+        &lt;ul&gt;
+          &lt;li&gt;B and A get a value of &lt;code class=&quot;highlighter-rouge&quot;&gt;1/255&lt;/code&gt; if there is a horizontal discrepancy (zero otherwise)&lt;/li&gt;
+          &lt;li&gt;R and G get a value of &lt;code class=&quot;highlighter-rouge&quot;&gt;1/255&lt;/code&gt; if there is a vertical discrepancy (zero otherwise)
+            &lt;ul&gt;
+              &lt;li&gt;If there is a horizontal discrepancy, this means that there is a vertical line and vice versa! Keep this in mind for the Count line lengths shader.&lt;/li&gt;
+            &lt;/ul&gt;
+          &lt;/li&gt;
+        &lt;/ul&gt;
+      &lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For my implementation I dropped the mask because the line length texture can serve the exact same purpose, except that it’s data is in different channels and checks of equals 1 should be converted to doesn’t equal 0. This made the flow of the algorithm a lot easier and saved some memory.&lt;/p&gt;
+
+&lt;h1 id=&quot;count-line-lengths&quot;&gt;Count line lengths&lt;/h1&gt;
+&lt;p&gt;The process of determining the line lengths uses a technique called recursive doubling which is the reason this part of the process gets it’s logarithmic runtime performance of O(log4(maxLineLength)) this basically comes down to doing 4 passes for a maximum length of 256 pixels. To see how this works we should first see exactly how the line-length buffer is structured.&lt;/p&gt;
+
+&lt;p&gt;Basically, the R channel stores how many pixels a certain line has to the left of it and the G channel stores how many there are to the right; this means that for each pixel you can look up the length of the edge by summing up either the R and G channels for horizontal length and the R and G channels for vertical length.&lt;/p&gt;
+
+&lt;p&gt;[image]*(asdsdf)&lt;/p&gt;
+
+&lt;p&gt;The gist of the algorithm is pretty simple and I’ll go over it briefly. Just keep in mind that the following loop is done per channel (eg. 4 times).&lt;/p&gt;
+
+&lt;div class=&quot;language-glsl highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// PreviousLengths is initialized to 1.f/255.f for edges and 0 for non-edges&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;float4&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;currentLengths&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tex2D&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;PreviousLengths&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Tex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;float4&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;currentDelta&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;currentLengths&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;PixelSize&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zzww&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;float&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Threshold&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Level&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;255&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+ 
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;currentLengths&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Threshold&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;float2&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;newTex&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Tex&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;float2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;currentDelta&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;kt&quot;&gt;float&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;oneDelta&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tex2D&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;PreviousLengths&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;newTex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;currentLengths&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;oneDelta&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;newTex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;oneDelta&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;PixelSize&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;z&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;For the first pass Level is initialized to 1 (then to 4, 16 and 64) so this check only does the length count only if it thinks it should still be counting the lengths of the edges. PixelSize is initialized to &lt;code class=&quot;highlighter-rouge&quot;&gt;(1/width, 1/height, 255/width, 255/height)&lt;/code&gt; so when multiplying by zzww we convert between increments in 1/255th to increments in &lt;code class=&quot;highlighter-rouge&quot;&gt;1/width&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;1/height&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;The interesting part, however, is inside the loop as it moves more pixels to the side depending on the value in the R channel it retrieves. This has a effect that if the value at that pixel is 0, nothing changes and currentLengths doesn’t get incremented.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;&quot;&gt;image&lt;/a&gt;a;lksjdflasdf&lt;/p&gt;
+
+&lt;p&gt;When doing normal point-sampling when you reach 0 you’ll know the line has ended and the loop makes sure you stop there. Hower; as shown by Nicolas Vizerie in MLAA (MorphoLogical AntiAliasing) on the GPU using Direct3D9.0 using bilinear filtering can reduce the amount of texture fetches by testing two lines at a time.&lt;/p&gt;
+
+&lt;h1 id=&quot;determine-blend-weights&quot;&gt;Determine blend weights&lt;/h1&gt;
+&lt;p&gt;The blend weights are calculated from a pre-generated lookup table (look for tabAires in the source-code, I didn’t bother to re-implement it). However, the basic gist of the table is that on the vertical axis is the size (eg. the sum of two channels in the LineLength texture) of the line and on the horizontal is the size in one direction (eg. one of the two channels in the LineLength texture). The content of the table are the areas below the triangles that the edges form and they are almost all handled by the formula  &lt;code class=&quot;highlighter-rouge&quot;&gt;0.5 * (1. - (2 * j + 1) / (float)S)&lt;/code&gt; the other formulas in the lookup table are there to help in edge cases where the equation tails off.  Each pixel in the lookup table has a range of &lt;code class=&quot;highlighter-rouge&quot;&gt;0.25 &amp;lt; pixelvalue &amp;lt; 0.5&lt;/code&gt; because the blending of a certain pixel has a maximum contribution of four other pixels.&lt;/p&gt;
+
+&lt;p&gt;The shader, although lengthy has quite a straightforward implementation that basically checks the endpoints of the lines to see if there is exists an edge orthogonal to it. If that’s the case, it uses the shortest of the two line-segments and the total size of the original line to determine the weights in the lookup table. This process is done four times:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Horizontal for current pixel&lt;/li&gt;
+  &lt;li&gt;Vertical for current pixel&lt;/li&gt;
+  &lt;li&gt;Horizontal for one pixel to the left&lt;/li&gt;
+  &lt;li&gt;Vertical for one pixel above&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h1 id=&quot;further-references&quot;&gt;Further references&lt;/h1&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://web.archive.org/web/20120911001541/http://divergentcoder.com:80/rendering/mlaa-demo-2/&quot;&gt;MLAA Demo 2 by @synulation Optimized DX10 version of the previous version of the shader.&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://www.iryoku.com/mlaa/&quot;&gt;Practical Morphological Anti-Aliasing Other MLAA on the GPU technique&lt;/a&gt;.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://web.archive.org/web/20140421111419/http://www.vizerie3d.net:80/&quot;&gt;MLAA (MorphoLogical AntiAliasing) on the GPU using Direct3D9.0 Another MLAA implementation (also uses the old version of the paper).&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://web.archive.org/web/20160320103906/http://igm.univ-mlv.fr/~biri/mlaa-gpu/&quot;&gt;Morphological Antialiasing on GPU&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://developer.amd.com/wordpress/media/2012/10/SATsketch-siggraph05.pdf&quot;&gt;Interactive Summed-Area Table Generation for Glossy Environmental Reflections&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Jasper Bekkers</name><email>bekkers@gmail.com</email></author><summary type="html">Practical MLAA on the GPU – My take In days where FXAA seems to be the anti-aliasing method of choice, due to it being easy to implement and fast to execute. I’m going to take a look at how the “French MLAA paper” (Interactive Summed-Area Table Generation for Glossy Environmental Reﬂections). And second, because the code is quite hard to understand if you don’t know any French (I don’t, and because of this I might have made some mistakes; bear with me).</summary></entry></feed>
